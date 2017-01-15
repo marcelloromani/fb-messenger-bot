@@ -5,8 +5,12 @@ import json
 import requests
 from flask import Flask, request
 
+from chatbot import ChatBot
+
 app = Flask(__name__)
 
+# where we store references to each user's chatbot instance
+chats = dict()
 
 @app.route('/', methods=['GET'])
 def verify():
@@ -37,9 +41,17 @@ def webhook():
 
                     sender_id = messaging_event["sender"]["id"]        # the facebook ID of the person sending you the message
                     recipient_id = messaging_event["recipient"]["id"]  # the recipient's ID, which should be your page's facebook ID
-                    message_text = messaging_event["message"]["text"]  # the message's text
+                    if "text" in messaging_event["message"].keys():
+                        message_text = messaging_event["message"]["text"]  # the message's text
+                    else:
+                        message_text = ""
 
-                    send_message(sender_id, "got it, thanks!")
+                    if message_text == "":
+                        log("Got empty message")
+                    else:
+                        # we got the user's message, now prepare a response and send it back to the user
+                        response = generate_response(sender_id, message_text)
+                        send_message(sender_id, response)
 
                 if messaging_event.get("delivery"):  # delivery confirmation
                     pass
@@ -75,6 +87,14 @@ def send_message(recipient_id, message_text):
     if r.status_code != 200:
         log(r.status_code)
         log(r.text)
+
+
+def generate_response(sender_id, user_msg):
+    # we need a different state machine for each user we talk to
+    # instantiate a new one if it's the first message with this user
+    if not sender_id in chats.keys():
+        chats[sender_id] = ChatBot()
+    return chats[sender_id].reply_to(user_msg)
 
 
 def log(message):  # simple wrapper for logging to stdout on heroku
